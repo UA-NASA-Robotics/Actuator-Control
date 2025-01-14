@@ -1,56 +1,9 @@
-import keyboard  #*pip install keyboard* in console
-import time
-import serial #pip install pyserial in console
+import serial
 
-#Initial values for the variables
-a1_vel_cmd = 0
-a1_pos_cmd = 55
-
-#Define the minimum and maximum limits
-MIN_VEL = -95
-MAX_VEL = 95
-MIN_POS = 0
-MAX_POS = 95
-
+from actuator_command import change_command
 
 SERIAL_PORT = 'COM4'  # Adjust this to your specific port
 BAUD_RATE = 9600  # Might want to experiment with higher baud rates, just make sure Arduino matches
-
-#Custom print function to update the same line in the console
-def custom_print(encoder_value, bool1, bool2):
-    print(f"A1 Vel Cmd: {int(a1_vel_cmd)} | A1 Pos Cmd: {int(a1_pos_cmd)} Encoder Value: {int(encoder_value)} | Butt1: {bool1} | Butt2: {bool2}")
-
-#Function to change the values based on key presses
-def change_command():
-    global a1_vel_cmd, a1_pos_cmd
-
-    if keyboard.is_pressed('q'):  #Increment velocity
-        a1_pos_cmd = 0
-        a1_vel_cmd += 5
-        if a1_vel_cmd > MAX_VEL:
-            a1_vel_cmd = MAX_VEL
-            time.sleep(.5)
-
-    elif keyboard.is_pressed('a'):  #Decrement velocity
-        a1_pos_cmd = 0
-        a1_vel_cmd -= 5
-        if a1_vel_cmd < MIN_VEL:
-            a1_vel_cmd = MIN_VEL
-            time.sleep(.5)
-
-    elif keyboard.is_pressed('e'):  #Increment position
-        a1_vel_cmd = 0
-        a1_pos_cmd += 5
-        if a1_pos_cmd > MAX_POS:
-            a1_pos_cmd = MAX_POS
-            time.sleep(.5)
-
-    elif keyboard.is_pressed('d'):  #Decrement position
-        a1_vel_cmd = 0
-        a1_pos_cmd -= 5
-        if a1_pos_cmd < MIN_POS:
-            a1_pos_cmd = MIN_POS
-            time.sleep(.5)
 
 # Function to initialize the serial connection
 def initialize_serial_connection():
@@ -81,7 +34,7 @@ def parse_arduino_data(data):
 
 # Main loop
 def main():
-    print("Press 'q/a' to adjust velocity, 'e/d' to adjust position, or 'p' to exit.")
+    print("Program has started")
 
     # Initialize the serial connection
     try:
@@ -95,14 +48,8 @@ def main():
 
     try:
         while True:
-            # Exit the program when 'p' is pressed
-            if keyboard.is_pressed('p'):
-                print("\nExiting the program.")
-                break
-
             # Adjust commands based on keyboard input
-            change_command()
-            
+            a1_vel_cmd, a1_pos_cmd = change_command()
 
             # Read and parse data from the Arduino
             if ser.in_waiting > 0:
@@ -112,7 +59,7 @@ def main():
                 # Parse the received data
                 encoder_value, bool1, bool2 = parse_arduino_data(data)
                 if encoder_value is not None:
-                    custom_print(encoder_value, bool1, bool2)
+                    print(f"Vel Cmd: {a1_vel_cmd}, Pstn Cmd: {a1_pos_cmd}, Ecr Val: {encoder_value}, Btn1: {bool1}, Btn2: {bool2}")
                 else:
                     print("Skipping invalid data.")
     except KeyboardInterrupt:
