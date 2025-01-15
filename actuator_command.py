@@ -20,27 +20,28 @@ def change_command():
     }
 
     key_to_position = {
-        'z': POSITION_STEPS[0],
-        'x': POSITION_STEPS[1],
-        'c': POSITION_STEPS[2],
-        'v': POSITION_STEPS[3],
-        'b': POSITION_STEPS[4],
+        '1': POSITION_STEPS[0],
+        '2': POSITION_STEPS[1],
+        '3': POSITION_STEPS[2],
+        '4': POSITION_STEPS[3],
+        '5': POSITION_STEPS[4],
     }
 
     velocity = 0  # Default velocity
     position = 0  # Default position
 
-    while True:
-        # Check for velocity key presses
-        for key, vel in key_to_velocity.items():
-            if keyboard.is_pressed(key):
-                velocity = vel
-                position = 0  # Reset position to 0 when changing velocity
-                return velocity, position
+    # Check for velocity key presses
+    for key, vel in key_to_velocity.items():
+        if keyboard.is_pressed(key):
+            velocity = vel
+            position = None  # Reset position to 0 when changing velocity
+            return velocity, position
 
         # Check for position key presses
-        for key, pos in key_to_position.items():
-            if keyboard.is_pressed(key):
-                position = pos
-                velocity = 0  # Reset velocity to 0 when changing position
-                return velocity, position
+    for key, pos in key_to_position.items():
+        if keyboard.is_pressed(key):
+            position = pos
+            velocity = None  # Reset velocity to 0 when changing position
+            return velocity, position
+        
+    return None, None
