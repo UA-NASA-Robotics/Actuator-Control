@@ -21,19 +21,20 @@ def initialize_serial_connection():
 def parse_arduino_data(data):
     try:
         parsed = data.strip('<>\n\r').split(',')
-        if len(parsed) == 5:  # Ensure we have the correct number of values
+        if len(parsed) == 6:  # Ensure we have the correct number of values
             encoder_value = int(parsed[0])  # First value is the number
             bool1 = bool(int(parsed[1]) == 1)  # Convert '1' to True, '0' to False
             bool2 = bool(int(parsed[2]) == 1)
             bool3 = bool(int(parsed[3]) == 1)
             homed_encoder_value = int(parsed[4])
-            return encoder_value, bool1, bool2, bool3, homed_encoder_value
+            actuator_one_length = int(parsed[5])
+            return encoder_value, bool1, bool2, bool3, homed_encoder_value, actuator_one_length
         else:
             print("Malformed data:", data)
-            return None, None, None, None, None
+            return None, None, None, None, None, None
     except ValueError as e:
         print("Error parsing data:", e)
-        return None, None, None, None, None
+        return None, None, None, None, None, None
     
 # Function to send velocity and position commands to Arduino with <>
 def send_commands_to_arduino(ser, vel_cmd, pos_cmd):
@@ -74,9 +75,9 @@ def main():
                 
                 #print("parsing")
                 # Parse the received data
-                encoder_value, bool1, bool2, bool3, homed_encoder_value = parse_arduino_data(data)
+                encoder_value, bool1, bool2, bool3, homed_encoder_value, actuator_one_length = parse_arduino_data(data)
                 if encoder_value is not None:
-                    print(f"Vel Cmd: {a1_vel_cmd}, Pstn Cmd: {a1_pos_cmd}, Ecr Val: {encoder_value}, Btn1: {bool1}, Btn2: {bool2}, Homed: {bool3}, HMD Ecr Val: {homed_encoder_value}")
+                    print(f"Vel Cmd: {a1_vel_cmd}, Pstn Cmd: {a1_pos_cmd}, Ecr Val: {encoder_value}, Btn1: {bool1}, Btn2: {bool2}, Homed: {bool3}, HMD Ecr Val: {homed_encoder_value}, Test: {actuator_one_length}")
                 else:
                     print("Skipping invalid data.")
     except KeyboardInterrupt:

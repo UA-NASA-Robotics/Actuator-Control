@@ -19,6 +19,7 @@ int desiredPosition = 0; // Default value if no input is received
 
 bool homed = false;
 int homedEncoder = 0;
+int length = 0;
 
 struct ButtonStates {
   int buttonUpperState;
@@ -26,10 +27,10 @@ struct ButtonStates {
 };
 
 ButtonStates getButtonStates() {
-  ButtonStates states;
-  states.buttonUpperState = digitalRead(buttonUpperPin);
-  states.buttonLowerState = digitalRead(buttonLowerPin);
-  return states;
+  return {
+    digitalRead(buttonUpperPin),
+    digitalRead(buttonLowerPin)
+  };
 }
 
 void speedDriveMotor(int percentage) {
@@ -71,22 +72,19 @@ void parseSerialInput(String input) {
 }
 
 void setup() {
-  // Set all the control pins as outputs
+  // IBT-2 pins
   pinMode(RPWM, OUTPUT);
   pinMode(LPWM, OUTPUT);
   pinMode(R_EN, OUTPUT);
   pinMode(L_EN, OUTPUT);
-
-  // For now these two are wired to be enabled, we could just jump them with the 5V power to hold them constant
   digitalWrite(R_EN, HIGH);
   digitalWrite(L_EN, HIGH);
 
-  // Sets all the input pins for the limit switch buttons
+  // Button pins
   digitalWrite(buttonUpperPin, INPUT_PULLUP);
   digitalWrite(buttonLowerPin, INPUT_PULLUP);
   
-
-  // Set encoder pins and attach interrupts
+  // Encoder pins
   pinMode(ENC_A, INPUT_PULLUP);
   pinMode(ENC_B, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(ENC_A), read_encoder, CHANGE);
@@ -96,18 +94,15 @@ void setup() {
 }
 
 void loop() {
-  const unsigned long movementCheckInterval = 500; // Check every 500 ms
-  const unsigned long commandTimeout = 2000; // Timeout in ms (2 seconds)
-  static unsigned long lastMovementCheckTime = 0;
-  static unsigned long forwardStartTime = 0;
   static unsigned long lastCommandTime = 0;
-
   static int lastCounter = 0;
-  static bool checkingHomed = false;
-  static bool commandReceived = false;
+  static unsigned long lastMovementCheckTime = 0;
   static bool isMoving = false;
 
   ButtonStates buttonStates = getButtonStates();
+  static unsigned long forwardStartTime = 0;
+  static bool checkingHomed = false;
+  static bool commandReceived = false;
 
   // Check if serial input is available
   if (Serial.available() > 0) {
@@ -120,7 +115,7 @@ void loop() {
   }
 
   // Check for command timeout
-  if (millis() - lastCommandTime > commandTimeout) {
+  if (millis() - lastCommandTime > 1000) { //1 second command timeout
     commandReceived = false; // No valid command within timeout
     desiredSpeed = 0;        // Stop actuator for safety
   }
@@ -135,7 +130,7 @@ void loop() {
   }
 
   // Movement verification logic
-  if (millis() - lastMovementCheckTime >= movementCheckInterval) {
+  if (millis() - lastMovementCheckTime >= 500) { // 500 milliseconds timeout
     if (counter != lastCounter) {
       isMoving = true; // Encoder value has changed; actuator is moving
     } else {
@@ -152,14 +147,20 @@ void loop() {
   }
 
   // Check if 1 second has passed while going forward
-  if (checkingHomed) {
-    if (millis() - forwardStartTime >= 1000) { // Check after 1 second
-      if (counter == lastCounter && isMoving == false && commandReceived == true && desiredSpeed > 0) {
+  if (checkingHomed && millis() - forwardStartTime >= 1000) {      
+    if (!isMoving && commandReceived && desiredSpeed > 0) {
         homed = true;  // Encoder hasn't changed; actuator is homed
         homedEncoder = counter;
       }
       checkingHomed = false;  // Reset the check
-    }
+  }
+
+  if (homed) {
+    const int lengthExtended = 321; //mm
+    const int lengthRetracted = 217; //mm
+    const int pulsesPerTravel = 17.4; // pulses per mm of travel    
+
+    length = round(lengthExtended - (homedEncoder - counter) * pulsesPerTravel / );
   }
 
   // Use the speedDriveMotor function to drive the motor
@@ -176,6 +177,8 @@ void loop() {
   Serial.print(homed);
   Serial.print(",");
   Serial.print(homedEncoder);
+  Serial.print(",");
+  Serial.print(length);
   Serial.println(">");    
 }
 
