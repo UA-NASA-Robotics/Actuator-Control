@@ -1,3 +1,5 @@
+#include <Arduino.h>
+
 // Define pins for the IBT-2 motor driver
 const int L_EN = 7; // ORANGE
 const int LPWM = 5; // YELLOW
@@ -32,6 +34,34 @@ ButtonStates getButtonStates() {
     digitalRead(buttonLowerPin)
   };
 }
+
+void read_encoder() {
+  // Encoder interrupt routine for both pins. Updates counter
+  // if they are valid and have rotated a full indent
+ 
+  static uint8_t old_AB = 3;  // Lookup table index
+  static int8_t encval = 0;   // Encoder value  
+  static const int8_t enc_states[]  = {0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0}; // Lookup table
+
+  old_AB <<=2;  // Remember previous state
+
+  if (digitalRead(ENC_A)) old_AB |= 0x02; // Add current state of pin A
+  if (digitalRead(ENC_B)) old_AB |= 0x01; // Add current state of pin B
+  
+  encval += enc_states[( old_AB & 0x0f )];
+
+  // Update counter if encoder has rotated a full indent, that is at least 4 steps
+  if( encval > 3 ) {        // Four steps forward
+    int changevalue = 1;
+    counter = counter + changevalue;              // Update counter
+    encval = 0;
+  }
+  else if( encval < -3 ) {        // Four steps backward
+    int changevalue = -1;
+    counter = counter + changevalue;              // Update counter
+    encval = 0;
+  }
+} 
 
 void speedDriveMotor(int percentage) {
   // Ensures that the input into the function is always a valid percentage
@@ -157,10 +187,10 @@ void loop() {
 
   if (homed) {
     const int lengthExtended = 321; //mm
-    const int lengthRetracted = 217; //mm
+    // const int lengthRetracted = 217; //mm
     const int pulsesPerTravel = 17.4; // pulses per mm of travel    
 
-    length = round(lengthExtended - (homedEncoder - counter) * pulsesPerTravel / );
+    length = round(lengthExtended - (homedEncoder - counter) * pulsesPerTravel);
   }
 
   // Use the speedDriveMotor function to drive the motor
@@ -181,31 +211,3 @@ void loop() {
   Serial.print(length);
   Serial.println(">");    
 }
-
-void read_encoder() {
-  // Encoder interrupt routine for both pins. Updates counter
-  // if they are valid and have rotated a full indent
- 
-  static uint8_t old_AB = 3;  // Lookup table index
-  static int8_t encval = 0;   // Encoder value  
-  static const int8_t enc_states[]  = {0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0}; // Lookup table
-
-  old_AB <<=2;  // Remember previous state
-
-  if (digitalRead(ENC_A)) old_AB |= 0x02; // Add current state of pin A
-  if (digitalRead(ENC_B)) old_AB |= 0x01; // Add current state of pin B
-  
-  encval += enc_states[( old_AB & 0x0f )];
-
-  // Update counter if encoder has rotated a full indent, that is at least 4 steps
-  if( encval > 3 ) {        // Four steps forward
-    int changevalue = 1;
-    counter = counter + changevalue;              // Update counter
-    encval = 0;
-  }
-  else if( encval < -3 ) {        // Four steps backward
-    int changevalue = -1;
-    counter = counter + changevalue;              // Update counter
-    encval = 0;
-  }
-} 

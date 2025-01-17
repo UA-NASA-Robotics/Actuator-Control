@@ -1,7 +1,6 @@
 import serial
-import time
-
 from actuator_command import *
+
 
 SERIAL_PORT = 'COM4'  # Adjust this to your specific port
 BAUD_RATE = 115200 # Might want to experiment with higher baud rates, just make sure Arduino matches
