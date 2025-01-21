@@ -16,17 +16,31 @@ const int ENC_B = 3;
 
 volatile int counter = 0;
 
-int desiredSpeed = 0;  // Default value if no input is received
-int desiredPosition = 0; // Default value if no input is received
+int desiredSpeed    = 0;  // Default value if no input is received
+int desiredPosition = 0;  // Default value if no input is received
 
-bool homed = false;
-int homedEncoder = 0;
-int length = 0;
+bool isHomed        = false;
+int  homedEncoder = 0;
+int  length       = 0;
 
 struct ButtonStates {
-  int buttonUpperState;
-  int buttonLowerState;
+  int isButtonUpperReleased;
+  int isButtonLowerReleased;
 };
+
+
+static unsigned long forwardStartTime = 0;
+static bool isCheckingHomed = false;
+static bool isCommandReceived = false;
+
+static unsigned long lastCommandTime = 0;
+static int lastCounter = 0;
+static unsigned long lastMovementCheckTime = 0;
+static bool isMoving = false;
+
+const int lengthExtended = 321;    //mm
+                                   // const int lengthRetracted = 217; //mm
+const int pulsesPerTravel = 17.4;  // pulses per mm of travel    
 
 ButtonStates getButtonStates() {
   return {
@@ -63,23 +77,21 @@ void read_encoder() {
   }
 } 
 
-void speedDriveMotor(int percentage) {
-  // Ensures that the input into the function is always a valid percentage
-  if (percentage > 100) percentage = 100;
-  if (percentage < -100) percentage = -100;
+void speedDriveMotor(int speed) {
+  // Ensures that the input into the function is always a valid speed
+  if (speed > 1) speed = 1;
+  if (speed < -1) speed = -1;
+  if (speed < 1 && speed > -1) speed = 0;
 
-  // Converts the percentage into a PWM value (absolute value because PWM cannot be negative)
-  int pwmValue = map(abs(percentage), 0, 100, 0, 255);
-
-  // If percentage is positive, drive forward at the converted PWM percentage
-  if (percentage > 0) {
+  // If percentage is positive, drive forward at max power.
+  if (speed == 1) {
     analogWrite(LPWM, 0);
-    analogWrite(RPWM, pwmValue);
+    analogWrite(RPWM, 255);
   }
-  // If percentage is negative, drive backward at the converted PWM percentage
-  else if (percentage < 0) {
+  // If percentage is negative, drive backward at max power
+  else if (speed == -1) {
     analogWrite(RPWM, 0);
-    analogWrite(LPWM, pwmValue);
+    analogWrite(LPWM, 255);
   }
   // If percentage is zero, do nothing
   else {
@@ -99,6 +111,16 @@ void parseSerialInput(String input) {
     if (speedStr != "None") desiredSpeed = speedStr.toInt();
     if (positionStr != "None") desiredPosition = positionStr.toInt();
   }
+}
+
+int buttonLimitLogic(struct ButtonStates buttonStates, int desiredSpeed) {
+    if (desiredSpeed > 0 && buttonStates.isButtonUpperReleased == 0) {
+        desiredSpeed = 0; // Prevent upward motion if the upper limit is not pressed
+    }
+    if (desiredSpeed < 0 && buttonStates.isButtonLowerReleased == 0) {
+        desiredSpeed = 0; // Prevent downward motion if the lower limit is not pressed
+    }
+    return desiredSpeed;
 }
 
 void setup() {
@@ -124,74 +146,45 @@ void setup() {
 }
 
 void loop() {
-  static unsigned long lastCommandTime = 0;
-  static int lastCounter = 0;
-  static unsigned long lastMovementCheckTime = 0;
-  static bool isMoving = false;
-
+  // Gets booleans of each button
   ButtonStates buttonStates = getButtonStates();
-  static unsigned long forwardStartTime = 0;
-  static bool checkingHomed = false;
-  static bool commandReceived = false;
 
   // Check if serial input is available
   if (Serial.available() > 0) {
     String input = Serial.readStringUntil('\n');
     parseSerialInput(input);
 
-    // Command received, update timestamp and flag
+    // Command received, update timestamp and flag command received
     lastCommandTime = millis();
-    commandReceived = true;
+    isCommandReceived = true;
   }
 
-  // Check for command timeout
-  if (millis() - lastCommandTime > 1000) { //1 second command timeout
-    commandReceived = false; // No valid command within timeout
-    desiredSpeed = 0;        // Stop actuator for safety
-  }
-
-  // Handle limit button conditions to modify desired speed
-  if (desiredSpeed > 0 && buttonStates.buttonUpperState == 0) {
-    desiredSpeed = 0;
-  }
-
-  if (desiredSpeed < 0 && buttonStates.buttonLowerState == 0) {
-    desiredSpeed = 0;
-  }
+  // Handle limit button conditions to modify desired speed, sets speedto zero if either button is pressed
+  desiredSpeed = buttonLimitLogic(buttonStates, desiredSpeed);
 
   // Movement verification logic
   if (millis() - lastMovementCheckTime >= 500) { // 500 milliseconds timeout
-    if (counter != lastCounter) {
-      isMoving = true; // Encoder value has changed; actuator is moving
-    } else {
-      isMoving = false; // Encoder value hasn't changed; actuator is stationary
-    }
-    lastCounter = counter; // Update last counter for next check
-    lastMovementCheckTime = millis(); // Update movement check timestamp
+    isMoving              = (counter != lastCounter);  // If current encoder doesn't equal last encoder, it has to be moving
+    lastCounter           = counter;                   // Update last counter for next check
+    lastMovementCheckTime = millis();                  // Update movement check timestamp
   }
 
   // Check if actuator is being commanded to go forward and system is receiving commands
-  if (desiredSpeed > 0 && !checkingHomed && commandReceived) {
+  if (desiredSpeed > 0 && !isCheckingHomed && isCommandReceived) {
     forwardStartTime = millis();  // Start the timer
-    checkingHomed = true;         // Begin homed check process
+    isCheckingHomed  = true;      // Begin homed check process
   }
 
   // Check if 1 second has passed while going forward
-  if (checkingHomed && millis() - forwardStartTime >= 1000) {      
-    if (!isMoving && commandReceived && desiredSpeed > 0) {
-        homed = true;  // Encoder hasn't changed; actuator is homed
-        homedEncoder = counter;
+  if (isCheckingHomed && millis() - forwardStartTime >= 1000) {      
+    if (!isMoving && isCommandReceived && desiredSpeed > 0) {
+        isHomed      = true;     // Encoder hasn't changed; actuator is homed
+        homedEncoder = counter;  //Records the value of the counter when it is homed
       }
-      checkingHomed = false;  // Reset the check
+      isCheckingHomed = false;  // Reset the check
   }
 
-  if (homed) {
-    const int lengthExtended = 321; //mm
-    // const int lengthRetracted = 217; //mm
-    const int pulsesPerTravel = 17.4; // pulses per mm of travel    
-
-    length = round(lengthExtended - (homedEncoder - counter) * pulsesPerTravel);
-  }
+  if (isHomed) length = round(lengthExtended - (homedEncoder - counter) / pulsesPerTravel);
 
   // Use the speedDriveMotor function to drive the motor
   speedDriveMotor(desiredSpeed);
@@ -200,11 +193,11 @@ void loop() {
   Serial.print("<");
   Serial.print(counter);
   Serial.print(",");
-  Serial.print(buttonStates.buttonUpperState);
+  Serial.print(buttonStates.isButtonUpperReleased);
   Serial.print(",");
-  Serial.print(buttonStates.buttonLowerState);
+  Serial.print(buttonStates.isButtonLowerReleased);
   Serial.print(",");
-  Serial.print(homed);
+  Serial.print(isHomed);
   Serial.print(",");
   Serial.print(homedEncoder);
   Serial.print(",");

@@ -1,22 +1,13 @@
 import keyboard
 
 # Define velocity and position steps
-VELOCITY_STEPS = [0, 25, 50, 75, 100]
-NEGATIVE_VELOCITY_STEPS = [-x for x in VELOCITY_STEPS]
+VELOCITY_STEPS = [-1, 1]
 POSITION_STEPS = [0, 25, 50, 75, 100]
 
 def change_command():
     key_to_velocity = {
-        'q': VELOCITY_STEPS[0],
-        'w': VELOCITY_STEPS[1],
-        'e': VELOCITY_STEPS[2],
-        'r': VELOCITY_STEPS[3],
-        't': VELOCITY_STEPS[4],
-        'a': NEGATIVE_VELOCITY_STEPS[0],
-        's': NEGATIVE_VELOCITY_STEPS[1],
-        'd': NEGATIVE_VELOCITY_STEPS[2],
-        'f': NEGATIVE_VELOCITY_STEPS[3],
-        'g': NEGATIVE_VELOCITY_STEPS[4],
+        't': VELOCITY_STEPS[1],
+        'g': VELOCITY_STEPS[0],
     }
 
     key_to_position = {
