@@ -28,15 +28,12 @@ struct ButtonStates {
   int isButtonLowerReleased;
 };
 
+long forwardStartTime  = 0;
+bool isCheckingHomed   = false;
+bool isCommandReceived = false;
 
-static unsigned long forwardStartTime = 0;
-static bool isCheckingHomed = false;
-static bool isCommandReceived = false;
-
-static unsigned long lastCommandTime = 0;
-static int lastCounter = 0;
-static unsigned long lastMovementCheckTime = 0;
-static bool isMoving = false;
+long lastCommandTime       = 0;
+long lastMovementCheckTime = 0;
 
 const int lengthExtended = 321;    //mm
                                    // const int lengthRetracted = 217; //mm
@@ -85,19 +82,35 @@ void speedDriveMotor(int speed) {
 
   // If percentage is positive, drive forward at max power.
   if (speed == 1) {
-    analogWrite(LPWM, 0);
-    analogWrite(RPWM, 255);
+    digitalWrite(LPWM, 0);
+    digitalWrite(RPWM, 1);
   }
   // If percentage is negative, drive backward at max power
   else if (speed == -1) {
-    analogWrite(RPWM, 0);
-    analogWrite(LPWM, 255);
+    digitalWrite(RPWM, 0);
+    digitalWrite(LPWM, 1);
   }
   // If percentage is zero, do nothing
   else {
-    analogWrite(RPWM, 0);
-    analogWrite(LPWM, 0);
+    digitalWrite(RPWM, 0);
+    digitalWrite(LPWM, 0);
   }
+}
+
+void sendStatus(int counter, struct ButtonStates buttonStates, bool isMoving, bool isHomed, int homedEncoder, int length) {
+  Serial.print("<");
+  Serial.print(counter);
+  Serial.print(",");
+  Serial.print(buttonStates.isButtonUpperReleased);
+  Serial.print(",");
+  Serial.print(isMoving);
+  Serial.print(",");
+  Serial.print(isHomed);
+  Serial.print(",");
+  Serial.print(homedEncoder);
+  Serial.print(",");
+  Serial.print(length);
+  Serial.println(">"); 
 }
 
 // Function to parse serial input "<integer, integer>" format
@@ -111,6 +124,20 @@ void parseSerialInput(String input) {
     if (speedStr != "None") desiredSpeed = speedStr.toInt();
     if (positionStr != "None") desiredPosition = positionStr.toInt();
   }
+}
+
+bool movementCheck(int counter) {
+  static bool isMoving = false;
+  static int lastCounter = counter;
+  static long lastMovementCheckTime = millis();
+
+  if (millis() - lastMovementCheckTime >= 500) {
+    isMoving = (counter != lastCounter);
+    lastCounter = counter;
+    lastMovementCheckTime = millis();
+  }
+  
+  return isMoving;
 }
 
 int buttonLimitLogic(struct ButtonStates buttonStates, int desiredSpeed) {
@@ -129,6 +156,7 @@ void setup() {
   pinMode(LPWM, OUTPUT);
   pinMode(R_EN, OUTPUT);
   pinMode(L_EN, OUTPUT);
+  // Sends IBT-2 enable and will hold it
   digitalWrite(R_EN, HIGH);
   digitalWrite(L_EN, HIGH);
 
@@ -153,21 +181,16 @@ void loop() {
   if (Serial.available() > 0) {
     String input = Serial.readStringUntil('\n');
     parseSerialInput(input);
-
-    // Command received, update timestamp and flag command received
-    lastCommandTime = millis();
     isCommandReceived = true;
+  } else {
+    isCommandReceived = false;
   }
 
   // Handle limit button conditions to modify desired speed, sets speedto zero if either button is pressed
   desiredSpeed = buttonLimitLogic(buttonStates, desiredSpeed);
 
   // Movement verification logic
-  if (millis() - lastMovementCheckTime >= 500) { // 500 milliseconds timeout
-    isMoving              = (counter != lastCounter);  // If current encoder doesn't equal last encoder, it has to be moving
-    lastCounter           = counter;                   // Update last counter for next check
-    lastMovementCheckTime = millis();                  // Update movement check timestamp
-  }
+  bool isMoving = movementCheck(counter);
 
   // Check if actuator is being commanded to go forward and system is receiving commands
   if (desiredSpeed > 0 && !isCheckingHomed && isCommandReceived) {
@@ -176,31 +199,20 @@ void loop() {
   }
 
   // Check if 1 second has passed while going forward
-  if (isCheckingHomed && millis() - forwardStartTime >= 1000) {      
-    if (!isMoving && isCommandReceived && desiredSpeed > 0) {
+  if (isCheckingHomed && millis() - forwardStartTime >= 5000) {      
+    if (!isMoving && isCommandReceived && desiredSpeed == 1) {
         isHomed      = true;     // Encoder hasn't changed; actuator is homed
         homedEncoder = counter;  //Records the value of the counter when it is homed
       }
       isCheckingHomed = false;  // Reset the check
   }
 
+  // Logic for calculating total length of the actuator
   if (isHomed) length = round(lengthExtended - (homedEncoder - counter) / pulsesPerTravel);
 
   // Use the speedDriveMotor function to drive the motor
   speedDriveMotor(desiredSpeed);
 
   // Send feedback via serial
-  Serial.print("<");
-  Serial.print(counter);
-  Serial.print(",");
-  Serial.print(buttonStates.isButtonUpperReleased);
-  Serial.print(",");
-  Serial.print(buttonStates.isButtonLowerReleased);
-  Serial.print(",");
-  Serial.print(isHomed);
-  Serial.print(",");
-  Serial.print(homedEncoder);
-  Serial.print(",");
-  Serial.print(length);
-  Serial.println(">");    
+  sendStatus(counter, buttonStates, isMoving, isHomed, homedEncoder, length);   
 }
